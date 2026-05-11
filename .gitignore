@@ -1,0 +1,11 @@
+node_modules/
+*.js.map
+*.tsbuildinfo
+build/
+out/
+.env
+npm-debug.log*
+.cache/
+coverage/
+*.log
+*.swo
