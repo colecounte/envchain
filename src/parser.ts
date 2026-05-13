@@ -1,37 +1,29 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { readFile } from 'fs/promises';
 
-export interface EnvEntry {
-  key: string;
-  value: string;
-  source: string;
-}
+export type EnvMap = Record<string, string>;
 
-export type EnvMap = Map<string, EnvEntry>;
-
-/**
- * Parses a .env file content into key-value pairs.
- * Supports comments (#), quoted values, and blank lines.
- */
-export function parseEnvContent(content: string, source: string): EnvMap {
-  const result: EnvMap = new Map();
+export function parseEnvContent(content: string): EnvMap {
+  const result: EnvMap = {};
   const lines = content.split(/\r?\n/);
 
   for (const raw of lines) {
     const line = raw.trim();
 
-    // Skip empty lines and comments
-    if (!line || line.startsWith('#')) continue;
+    if (!line || line.startsWith('#')) {
+      continue;
+    }
 
     const eqIndex = line.indexOf('=');
-    if (eqIndex === -1) continue;
+    if (eqIndex === -1) {
+      continue;
+    }
 
     const key = line.slice(0, eqIndex).trim();
     let value = line.slice(eqIndex + 1).trim();
 
     if (!key) continue;
 
-    // Strip surrounding quotes (single or double)
+    // Strip surrounding quotes
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))
@@ -39,23 +31,21 @@ export function parseEnvContent(content: string, source: string): EnvMap {
       value = value.slice(1, -1);
     }
 
-    result.set(key, { key, value, source });
+    result[key] = value;
   }
 
   return result;
 }
 
-/**
- * Reads and parses a .env file from disk.
- * Returns an empty map if the file does not exist.
- */
-export function parseEnvFile(filePath: string): EnvMap {
-  const resolved = path.resolve(filePath);
-
-  if (!fs.existsSync(resolved)) {
-    return new Map();
+export async function parseEnvFile(filePath: string): Promise<EnvMap> {
+  let content: string;
+  try {
+    content = await readFile(filePath, 'utf-8');
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {};
+    }
+    throw err;
   }
-
-  const content = fs.readFileSync(resolved, 'utf-8');
-  return parseEnvContent(content, resolved);
+  return parseEnvContent(content);
 }
