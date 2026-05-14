@@ -1,87 +1,80 @@
-#!/usr/bin/env node
-import { resolveEnvToProcess } from './resolver';
+import { resolveEnv } from "./resolver";
+import { validateEnvMap, formatValidationIssues } from "./validator";
+import { applySchema } from "./schema";
+import { formatEnvMap, OutputFormat } from "./formatter";
 
-const USAGE = `
-Usage: envchain [options] [context...]
-
-Options:
-  --cwd <dir>      Working directory (default: process.cwd())
-  --print          Print resolved env vars instead of injecting into process
-  --help           Show this help message
-
-Contexts (applied in order, later overrides earlier):
-  local, staging, ci, production, etc.
-
-Examples:
-  envchain local staging
-  envchain --print local
-  envchain --cwd /path/to/project ci
-`.trim();
-
-function parseArgs(argv: string[]): {
-  cwd: string;
-  print: boolean;
-  contexts: string[];
+export interface ParsedArgs {
+  context: string;
+  dir: string;
+  format: OutputFormat;
+  strict: boolean;
   help: boolean;
-} {
-  const args = argv.slice(2);
-  const result = {
-    cwd: process.cwd(),
-    print: false,
-    contexts: [] as string[],
+}
+
+export function parseArgs(argv: string[]): ParsedArgs {
+  const args: ParsedArgs = {
+    context: "local",
+    dir: process.cwd(),
+    format: "dotenv",
+    strict: false,
     help: false,
   };
 
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (arg === '--help' || arg === '-h') {
-      result.help = true;
-    } else if (arg === '--print') {
-      result.print = true;
-    } else if (arg === '--cwd') {
-      const next = args[++i];
-      if (!next) {
-        console.error('Error: --cwd requires a directory argument');
-        process.exit(1);
-      }
-      result.cwd = next;
-    } else if (!arg.startsWith('--')) {
-      result.contexts.push(arg);
-    } else {
-      console.error(`Error: Unknown option "${arg}"`);
-      process.exit(1);
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === "--help" || arg === "-h") {
+      args.help = true;
+    } else if (arg === "--strict") {
+      args.strict = true;
+    } else if ((arg === "--context" || arg === "-c") && argv[i + 1]) {
+      args.context = argv[++i];
+    } else if ((arg === "--dir" || arg === "-d") && argv[i + 1]) {
+      args.dir = argv[++i];
+    } else if ((arg === "--format" || arg === "-f") && argv[i + 1]) {
+      args.format = argv[++i] as OutputFormat;
     }
   }
 
-  return result;
+  return args;
 }
 
-export async function main(argv: string[] = process.argv): Promise<void> {
-  const opts = parseArgs(argv);
+export function printHelp(): void {
+  console.log(`
+envchain — cascading .env manager
 
-  if (opts.help) {
-    console.log(USAGE);
+Usage: envchain [options]
+
+Options:
+  -c, --context <name>   Context to resolve (default: local)
+  -d, --dir <path>       Root directory to search for .env files (default: cwd)
+  -f, --format <fmt>     Output format: dotenv | export | json | csv (default: dotenv)
+  --strict               Exit with error if validation issues are found
+  -h, --help             Show this help message
+`.trim());
+}
+
+export async function run(argv: string[]): Promise<void> {
+  const args = parseArgs(argv);
+
+  if (args.help) {
+    printHelp();
     return;
   }
 
-  const contexts = opts.contexts.length > 0 ? opts.contexts : ['local'];
+  const env = await resolveEnv(args.context, args.dir);
+  const issues = validateEnvMap(env);
 
-  try {
-    const resolved = await resolveEnvToProcess(opts.cwd, contexts);
-
-    if (opts.print) {
-      for (const [key, value] of Object.entries(resolved)) {
-        console.log(`${key}=${value}`);
-      }
+  if (issues.length > 0) {
+    const msg = formatValidationIssues(issues);
+    if (args.strict) {
+      console.error(msg);
+      process.exit(1);
     } else {
-      Object.assign(process.env, resolved);
+      console.warn(msg);
     }
-  } catch (err) {
-    console.error('Error resolving env:', (err as Error).message);
-    process.exit(1);
   }
-}
 
-if (require.main === module) {
-  main();
+  const coerced = applySchema(env);
+  const output = formatEnvMap(coerced, args.format);
+  process.stdout.write(output);
 }
