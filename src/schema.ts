@@ -70,3 +70,11 @@ export function applySchema(
 
   return { result, violations };
 }
+
+/**
+ * Formats schema violations into human-readable strings.
+ * Useful for logging or displaying errors to the user.
+ */
+export function formatViolations(violations: SchemaViolation[]): string[] {
+  return violations.map(({ key, message }) => `[${key}] ${message}`);
+}
