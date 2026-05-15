@@ -16,6 +16,15 @@ export interface Watcher {
   stop: () => void;
 }
 
+/**
+ * Watches all env file candidates for the given context and directory.
+ * Triggers the callback with the merged env map whenever a relevant file changes.
+ *
+ * @param callback - Called with the context name and updated env map on change.
+ * @param onError - Optional handler for errors during file watching or env loading.
+ * @param options - Optional configuration: context, dir, and debounce delay.
+ * @returns A Watcher handle with a `stop()` method to clean up watchers.
+ */
 export function watchEnv(
   callback: WatchCallback,
   onError?: WatchErrorCallback,
@@ -41,9 +50,16 @@ export function watchEnv(
     }, debounceMs);
   };
 
+  // Track directories already being watched to avoid duplicate watchers
+  const watchedDirs = new Set<string>();
+
   for (const candidate of candidates) {
     const filePath = path.resolve(dir, candidate);
     const fileDir = path.dirname(filePath);
+
+    if (watchedDirs.has(fileDir)) continue;
+    watchedDirs.add(fileDir);
+
     try {
       const watcher = fs.watch(fileDir, { persistent: false }, (event, name) => {
         if (name && filePath.endsWith(name)) {
