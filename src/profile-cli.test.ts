@@ -26,6 +26,14 @@ describe("profile-cli", () => {
     fs.rmSync(tmpDir, { recursive: true });
   });
 
+  /** Helper to add a profile and reset the log buffer afterwards. */
+  function addProfile(name: string, contexts: string, desc?: string): void {
+    const args = ["add", name, "--contexts", contexts];
+    if (desc) args.push("--desc", desc);
+    runProfileCli(args, tmpDir);
+    logs = [];
+  }
+
   test("list with no profiles prints empty message", () => {
     runProfileCli(["list"], tmpDir);
     expect(logs[0]).toMatch(/No profiles/);
@@ -41,23 +49,21 @@ describe("profile-cli", () => {
   });
 
   test("list shows added profiles", () => {
-    runProfileCli(["add", "myapp", "--contexts", "local"], tmpDir);
-    logs = [];
+    addProfile("myapp", "local");
     runProfileCli(["list"], tmpDir);
     expect(logs[0]).toContain("myapp");
     expect(logs[0]).toContain("local");
   });
 
   test("get prints profile as JSON", () => {
-    runProfileCli(["add", "myapp", "--contexts", "ci"], tmpDir);
-    logs = [];
+    addProfile("myapp", "ci");
     runProfileCli(["get", "myapp"], tmpDir);
     const parsed = JSON.parse(logs.join(""));
     expect(parsed.name).toBe("myapp");
   });
 
   test("remove deletes a profile", () => {
-    runProfileCli(["add", "myapp", "--contexts", "local"], tmpDir);
+    addProfile("myapp", "local");
     runProfileCli(["remove", "myapp"], tmpDir);
     expect(loadProfiles(tmpDir)).toEqual({});
     expect(logs.some((l) => l.includes("removed"))).toBe(true);
